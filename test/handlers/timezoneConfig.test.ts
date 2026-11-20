@@ -4,8 +4,9 @@ import { openDb } from '../../src/db/connection.ts';
 import { createFixedEvent } from '../../src/repositories/events.ts';
 import { getUser } from '../../src/repositories/users.ts';
 import { getConfig } from '../../src/repositories/guildConfig.ts';
-import { listSubscriptions } from '../../src/repositories/subscriptions.ts';
+import { listSubscriptions, unsubscribe } from '../../src/repositories/subscriptions.ts';
 import { handleSetTimezone } from '../../src/handlers/timezone.ts';
+import { handleSetAlerts } from '../../src/handlers/subscriptions.ts';
 import { handleSetChannel, handleSetServerTz, handleSetAdminRole } from '../../src/handlers/config.ts';
 import { handleLegal } from '../../src/handlers/legal.ts';
 import { LEGAL_URLS } from '../../src/legal/urls.ts';
@@ -26,6 +27,35 @@ test('valid tz persists and auto-subscribes to default events', () => {
   assert.equal(subs.length, 1);
   assert.equal(subs[0].lead1Min, 60);
   assert.equal(subs[0].lead2Min, 10);
+});
+
+test('re-setting tz does not re-subscribe to opted-out defaults or reset custom leads', () => {
+  const db = openDb(':memory:');
+  createFixedEvent(db, {
+    guildId: 'g1', name: 'KO', description: 'd', createdBy: 'u1',
+    defaultSubscribed: true, slots: [{ dayOfWeek: 1, time: '20:00' }],
+  });
+  const keep = createFixedEvent(db, {
+    guildId: 'g1', name: 'Raid', description: 'd', createdBy: 'u1',
+    defaultSubscribed: true, slots: [{ dayOfWeek: 2, time: '21:00' }],
+  });
+  // First time: auto-subscribed to both defaults with [60, 10].
+  handleSetTimezone(db, { discordId: 'u2', guildId: 'g1', tz: 'Europe/Berlin' });
+  assert.equal(listSubscriptions(db, 'u2').length, 2);
+
+  // User opts out of the first default and customises leads on the second.
+  const koId = listSubscriptions(db, 'u2').find((s) => s.eventId !== keep)!.eventId;
+  unsubscribe(db, 'u2', koId);
+  handleSetAlerts(db, { discordId: 'u2', eventId: keep, leads: [30] });
+
+  // Re-setting the timezone must not resurrect the opt-out or reset custom leads.
+  handleSetTimezone(db, { discordId: 'u2', guildId: 'g1', tz: 'Asia/Seoul' });
+  assert.equal(getUser(db, 'u2')?.timezone, 'Asia/Seoul');
+  const subs = listSubscriptions(db, 'u2');
+  assert.equal(subs.length, 1);
+  assert.equal(subs[0].eventId, keep);
+  assert.equal(subs[0].lead1Min, 30);
+  assert.equal(subs[0].lead2Min, null);
 });
 
 test('invalid tz returns error and writes nothing', () => {

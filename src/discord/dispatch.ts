@@ -47,7 +47,7 @@ export async function route(i: ChatInputCommandInteraction, db: Database): Promi
     }
     case 'adhoc':
       if (sub === 'remove') {
-        return handleAdhocRemove(db, { discordId, eventId: eventId(), isAdmin: isAdmin(adminCtx()) });
+        return handleAdhocRemove(db, { discordId, guildId, eventId: eventId(), isAdmin: isAdmin(adminCtx()) });
       }
       if (!userTz) return say('Set your timezone first with /timezone set. Then try again.');
       return handleAdhocAdd(db, {
@@ -57,7 +57,7 @@ export async function route(i: ChatInputCommandInteraction, db: Database): Promi
         isAdmin: isAdmin(adminCtx()),
       });
     case 'event': {
-      if (sub === 'remove') return handleEventRemove(db, adminCtx(), { eventId: eventId() });
+      if (sub === 'remove') return handleEventRemove(db, adminCtx(), { eventId: eventId(), guildId });
       const slotText = i.options.getString('slots', sub === 'add');
       const slots = slotText === null ? undefined : parseSlots(slotText);
       if (slots === null) return say('Slots are not valid. Example: Mon 20:00, Thu 18:30');
@@ -72,6 +72,7 @@ export async function route(i: ChatInputCommandInteraction, db: Database): Promi
       }
       return handleEventEdit(db, adminCtx(), {
         eventId: eventId(),
+        guildId,
         ...(name !== null && { name }),
         ...(description !== null && { description }),
         ...(defaultSubscribed !== null && { defaultSubscribed }),

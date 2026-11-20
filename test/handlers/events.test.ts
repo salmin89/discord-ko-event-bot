@@ -35,8 +35,8 @@ test('non-admin add, edit, remove are rejected', () => {
   handleEventAdd(db, admin, fixed());
   const id = listEvents(db, 'g1')[0].id;
   assert.match(handleEventAdd(db, nonAdmin, fixed({ name: 'X' })).content, /admin/i);
-  assert.match(handleEventEdit(db, nonAdmin, { eventId: id, name: 'Y' }).content, /admin/i);
-  assert.match(handleEventRemove(db, nonAdmin, { eventId: id }).content, /admin/i);
+  assert.match(handleEventEdit(db, nonAdmin, { eventId: id, guildId: 'g1', name: 'Y' }).content, /admin/i);
+  assert.match(handleEventRemove(db, nonAdmin, { eventId: id, guildId: 'g1' }).content, /admin/i);
   assert.equal(listEvents(db, 'g1').length, 1);
   assert.equal(getEvent(db, id)!.name, 'KO');
 });
@@ -56,12 +56,12 @@ test('edit validates slots and updates fields; remove deletes', () => {
   const db = openDb(':memory:');
   handleEventAdd(db, admin, fixed());
   const id = listEvents(db, 'g1')[0].id;
-  handleEventEdit(db, admin, { eventId: id, slots: [{ dayOfWeek: 1, time: '99:99' }] });
+  handleEventEdit(db, admin, { eventId: id, guildId: 'g1', slots: [{ dayOfWeek: 1, time: '99:99' }] });
   assert.equal(getEvent(db, id)!.slots[0].time, '20:00');
-  handleEventEdit(db, admin, { eventId: id, name: 'KO2', slots: [{ dayOfWeek: 2, time: '19:30' }] });
+  handleEventEdit(db, admin, { eventId: id, guildId: 'g1', name: 'KO2', slots: [{ dayOfWeek: 2, time: '19:30' }] });
   assert.equal(getEvent(db, id)!.name, 'KO2');
   assert.deepEqual(getEvent(db, id)!.slots, [{ dayOfWeek: 2, time: '19:30' }]);
-  handleEventRemove(db, admin, { eventId: id });
+  handleEventRemove(db, admin, { eventId: id, guildId: 'g1' });
   assert.equal(getEvent(db, id), undefined);
 });
 
@@ -93,12 +93,12 @@ test('adhoc add with bad time is rejected', () => {
 test('adhoc remove: creator or admin only', () => {
   const db = openDb(':memory:');
   const id = createAdhocEvent(db, { guildId: 'g1', name: 'x', createdBy: 'u1', occurrenceMs: NOW + 1e7, creatorTz: 'UTC' });
-  assert.equal(handleAdhocRemove(db, { discordId: 'u2', eventId: id, isAdmin: false }).ephemeral, true);
+  assert.equal(handleAdhocRemove(db, { discordId: 'u2', guildId: 'g1', eventId: id, isAdmin: false }).ephemeral, true);
   assert.ok(getEvent(db, id));
-  handleAdhocRemove(db, { discordId: 'u1', eventId: id, isAdmin: false });
+  handleAdhocRemove(db, { discordId: 'u1', guildId: 'g1', eventId: id, isAdmin: false });
   assert.equal(getEvent(db, id), undefined);
   const id2 = createAdhocEvent(db, { guildId: 'g1', name: 'y', createdBy: 'u1', occurrenceMs: NOW + 1e7, creatorTz: 'UTC' });
-  handleAdhocRemove(db, { discordId: 'u2', eventId: id2, isAdmin: true });
+  handleAdhocRemove(db, { discordId: 'u2', guildId: 'g1', eventId: id2, isAdmin: true });
   assert.equal(getEvent(db, id2), undefined);
 });
 
@@ -119,4 +119,28 @@ test('list shows fixed and active adhoc with subscription state', () => {
   const lines = r.content.split('\n');
   assert.match(lines.find((l) => l.includes('FixedKO'))!, /\[subscribed\]/);
   assert.match(lines.find((l) => l.includes('FixedOther'))!, /\[not subscribed\]/);
+});
+
+test('admin in guild B cannot edit or remove a guild-A fixed event', () => {
+  const db = openDb(':memory:');
+  handleEventAdd(db, admin, fixed()); // created in g1
+  const id = listEvents(db, 'g1')[0].id;
+  // Admin acting from guild B (guildId: 'g2') must not reach guild A's event by id.
+  assert.match(handleEventEdit(db, admin, { eventId: id, guildId: 'g2', name: 'Hacked' }).content, /not exist/i);
+  assert.equal(getEvent(db, id)!.name, 'KO');
+  assert.match(handleEventRemove(db, admin, { eventId: id, guildId: 'g2' }).content, /not exist/i);
+  assert.ok(getEvent(db, id));
+  // Same admin acting in the owning guild still works.
+  handleEventRemove(db, admin, { eventId: id, guildId: 'g1' });
+  assert.equal(getEvent(db, id), undefined);
+});
+
+test('adhoc remove is refused across guilds', () => {
+  const db = openDb(':memory:');
+  const id = createAdhocEvent(db, { guildId: 'g1', name: 'x', createdBy: 'u1', occurrenceMs: NOW + 1e7, creatorTz: 'UTC' });
+  // Creator (and even an admin) acting from another guild cannot remove it.
+  assert.match(handleAdhocRemove(db, { discordId: 'u1', guildId: 'g2', eventId: id, isAdmin: true }).content, /not exist/i);
+  assert.ok(getEvent(db, id));
+  handleAdhocRemove(db, { discordId: 'u1', guildId: 'g1', eventId: id, isAdmin: false });
+  assert.equal(getEvent(db, id), undefined);
 });

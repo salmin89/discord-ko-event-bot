@@ -38,9 +38,23 @@ test('already sent is excluded', () => {
   assert.deepEqual(due, []);
 });
 
-test('fire-moment 5 minutes in the past is skipped', () => {
-  // occurrence in 55m, lead 60 -> fire moment was 5 minutes ago.
+test('catch-up: fire-moment a few minutes in the past, occurrence still ahead, fires', () => {
+  // occurrence in 55m, lead 60 -> fire moment was 5 minutes ago, occurrence still in the future.
   const due = computeDue({ nowMs: NOW, events: [adhoc(1, NOW + 55 * MIN)], subscriptions: [sub(1, 60)], wasSent: never });
+  assert.equal(due.length, 1);
+  assert.equal(due[0].leadMin, 60);
+  assert.equal(due[0].occurrenceMs, NOW + 55 * MIN);
+});
+
+test('catch-up: occurrence already past does not fire', () => {
+  // occurrence 1 minute ago: fire moment long past AND occurrence past -> no stale ping.
+  const due = computeDue({ nowMs: NOW, events: [adhoc(1, NOW - MIN)], subscriptions: [sub(1, 60)], wasSent: never });
+  assert.deepEqual(due, []);
+});
+
+test('catch-up: already-sent is still excluded', () => {
+  // fire moment in the past, occurrence ahead, but already sent -> excluded.
+  const due = computeDue({ nowMs: NOW, events: [adhoc(1, NOW + 55 * MIN)], subscriptions: [sub(1, 60)], wasSent: () => true });
   assert.deepEqual(due, []);
 });
 

@@ -1,7 +1,7 @@
 import type { Database } from 'better-sqlite3';
 import { computeDue } from './domain/reminders.ts';
 import type { EventWithSlots, SubscriptionWithUserTz } from './domain/reminders.ts';
-import { renderLocal } from './domain/time.ts';
+import { formatCountdown, renderLocal } from './domain/time.ts';
 import { listEvents } from './repositories/events.ts';
 import { getConfig } from './repositories/guildConfig.ts';
 import { markSent, wasSent } from './repositories/sentReminders.ts';
@@ -65,7 +65,7 @@ export async function tick(db: Database, rawNowMs: number, send: Sender): Promis
     if (seen.has(key)) continue;
     seen.add(key);
     const tz = tzByUser.get(d.userId) ?? 'UTC';
-    const content = `Reminder: ${d.eventName} starts in ${d.leadMin} min, at ${renderLocal(d.occurrenceMs, tz)} (${tz}).`;
+    const content = `⏳ ${formatCountdown(d.occurrenceMs - nowMs)} left until ${d.eventName} (starts ${renderLocal(d.occurrenceMs, tz)} ${tz}).`;
     try {
       await send(d.userId, content);
     } catch (err) {
@@ -78,7 +78,16 @@ export async function tick(db: Database, rawNowMs: number, send: Sender): Promis
 }
 
 export function startScheduler(db: Database, send: Sender): NodeJS.Timeout {
+  // Re-entrancy guard: a long-running tick (many DMs under rate limits) must not
+  // overlap with the next interval, or not-yet-marked users could be double-sent.
+  let running = false;
   return setInterval(() => {
-    tick(db, Date.now(), send).catch((err) => console.error('Scheduler tick failed:', err));
+    if (running) return;
+    running = true;
+    tick(db, Date.now(), send)
+      .catch((err) => console.error('Scheduler tick failed:', err))
+      .finally(() => {
+        running = false;
+      });
   }, 60_000);
 }

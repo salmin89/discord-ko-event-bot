@@ -49,24 +49,30 @@ export function handleEventAdd(db: Database, adminCtx: AdminInput, input: NewFix
 export function handleEventEdit(
   db: Database,
   adminCtx: AdminInput,
-  input: { eventId: number } & FixedEventEdit,
+  input: { eventId: number; guildId: string } & FixedEventEdit,
 ): Reply {
   if (!isAdmin(adminCtx)) return ADMIN_ONLY;
   const event = getEvent(db, input.eventId);
-  if (!event || event.type !== 'fixed') return err('This fixed event does not exist.');
+  if (!event || event.guildId !== input.guildId || event.type !== 'fixed') {
+    return err('This fixed event does not exist.');
+  }
   if (input.slots !== undefined) {
     const bad = validateSlots(input.slots);
     if (bad) return err(bad);
   }
-  const { eventId, ...edit } = input;
+  const { eventId, guildId: _guildId, ...edit } = input;
   editFixedEvent(db, eventId, edit);
   return ok(`Event "${edit.name ?? event.name}" updated.`);
 }
 
-export function handleEventRemove(db: Database, adminCtx: AdminInput, input: { eventId: number }): Reply {
+export function handleEventRemove(
+  db: Database,
+  adminCtx: AdminInput,
+  input: { eventId: number; guildId: string },
+): Reply {
   if (!isAdmin(adminCtx)) return ADMIN_ONLY;
   const event = getEvent(db, input.eventId);
-  if (!event) return err('This event does not exist.');
+  if (!event || event.guildId !== input.guildId) return err('This event does not exist.');
   removeEvent(db, input.eventId);
   return ok(`Event "${event.name}" removed.`);
 }
@@ -100,10 +106,12 @@ export function handleAdhocAdd(
 
 export function handleAdhocRemove(
   db: Database,
-  input: { discordId: string; eventId: number; isAdmin: boolean },
+  input: { discordId: string; guildId: string; eventId: number; isAdmin: boolean },
 ): Reply {
   const event = getEvent(db, input.eventId);
-  if (!event || event.type !== 'adhoc') return err('This adhoc event does not exist.');
+  if (!event || event.guildId !== input.guildId || event.type !== 'adhoc') {
+    return err('This adhoc event does not exist.');
+  }
   if (event.createdBy !== input.discordId && !input.isAdmin) {
     return err('Only the creator or an admin can remove this event.');
   }

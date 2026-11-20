@@ -48,7 +48,12 @@ export function computeDue(params: {
       for (const leadMin of leads) {
         if (leadMin > MAX_LEAD_MIN) continue;
         for (const occurrenceMs of occurrences) {
-          if (floorMinute(occurrenceMs - leadMin * MIN) !== nowMinute) continue;
+          // Bounded catch-up: fire if the lead moment has arrived or was missed
+          // (floor(fireMoment) <= floor(now)) as long as the occurrence is still ahead.
+          // This recovers a reminder whose exact minute was skipped by a late tick,
+          // without firing stale pings for occurrences already past. wasSent keeps it exactly-once.
+          if (floorMinute(occurrenceMs - leadMin * MIN) > nowMinute) continue;
+          if (occurrenceMs <= nowMs) continue;
           if (wasSent(event.id, occurrenceMs, sub.userId, leadMin)) continue;
           due.push({ userId: sub.userId, eventId: event.id, eventName: event.name, occurrenceMs, leadMin });
         }

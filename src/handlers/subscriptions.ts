@@ -41,12 +41,20 @@ export function handleSetAlerts(
   input: { discordId: string; eventId: number; leads: number[] },
 ): Reply {
   const { leads } = input;
+  // Defense-in-depth: the caller must have a timezone, mirroring handleSubscribe.
+  const user = getUser(db, input.discordId);
+  if (!user || !user.timezone) {
+    return err('Set your timezone first with the timezone command. Then set alerts again.');
+  }
   if (leads.length < 1 || leads.length > 2) return err('Give 1 or 2 alert times.');
   if (leads.some((n) => !Number.isInteger(n) || n < 0 || n > MAX_LEAD_MIN)) {
     return err(`Each alert time must be a whole number from 0 to ${MAX_LEAD_MIN} minutes.`);
   }
   const distinct = [...new Set(leads)];
   const event = getEvent(db, input.eventId);
+  // NOTE: no guild check here — this handler is not threaded with the caller's guildId.
+  // Alerts only tune an existing subscription (gated by subscribe/timezone), so cross-guild
+  // reach is low-risk; add guildId here if the subscription flow ever widens.
   if (!event) return err('This event does not exist.');
   subscribe(db, {
     userId: input.discordId,

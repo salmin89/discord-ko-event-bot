@@ -63,12 +63,15 @@ test('a throwing send (closed DMs) is caught, not marked sent, and can retry', a
   assert.equal(wasSent(db, id, OCC, 'u1', LEAD), true);
 });
 
-test('reminder content has the event name and the local start time', async () => {
+test('reminder content has the event name, countdown, and the local start time', async () => {
   const { db } = setup();
   let content = '';
   await tick(db, NOW, async (_u, c) => { content = c; });
   assert.ok(content.includes('Boss Fight'));
   assert.ok(content.includes(renderLocal(OCC, 'Europe/Berlin')));
+  // LEAD is 10 minutes before the occurrence -> "10m left", not "10 min".
+  assert.ok(content.includes('10m left'));
+  assert.ok(!content.includes('10 min'));
 });
 
 test('a failing send does not stop the next reminder', async () => {
