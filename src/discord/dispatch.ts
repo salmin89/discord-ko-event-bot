@@ -17,7 +17,7 @@ import { buildAdminCtx, parseSlots } from './context.ts';
 
 const say = (content: string): Reply => ({ content, ephemeral: true });
 
-async function route(i: ChatInputCommandInteraction, db: Database): Promise<Reply> {
+export async function route(i: ChatInputCommandInteraction, db: Database): Promise<Reply> {
   if (!i.guildId) return say('Use this command in a server.');
   const guildId = i.guildId;
   const discordId = i.user.id;
@@ -89,6 +89,12 @@ async function route(i: ChatInputCommandInteraction, db: Database): Promise<Repl
 
 /** Route a slash command to its handler and send the reply. Replies never ping. */
 export async function dispatch(i: ChatInputCommandInteraction, db: Database): Promise<void> {
-  const reply = await route(i, db);
+  let reply: Reply;
+  try {
+    reply = await route(i, db);
+  } catch (e) {
+    console.error('command failed', e);
+    reply = say('Something went wrong. Try again later.');
+  }
   await i.reply({ content: reply.content, ephemeral: reply.ephemeral, allowedMentions: { parse: [] } });
 }
