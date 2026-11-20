@@ -25,8 +25,8 @@ Other commands: `npm test`, `npm run lint`, `npm run build`.
 
 ```sh
 flyctl auth login
-flyctl launch --no-deploy        # or: flyctl apps create <name>
-flyctl volumes create data --size 1
+flyctl apps create <name>
+flyctl volumes create data --size 1 --region <region>
 flyctl secrets set DISCORD_TOKEN=your-token
 flyctl deploy
 ```
@@ -34,7 +34,19 @@ flyctl deploy
 - If you pick a new app name, update `app` in `fly.toml`.
 - The volume `data` is mounted at `/data`. The database is `/data/ko-bot.db`.
 - The bot is not a web server. `fly.toml` has no public service.
-- Use one machine only. A volume can attach to one machine.
+- Use one machine only. A volume can attach to one machine. Run `flyctl scale count 1` after deploy.
+- Do not use `flyctl launch`. It can overwrite `fly.toml` or add an http_service. If you use it, keep the existing `fly.toml`.
+
+## Legal pages
+
+The `site/` folder holds the Terms of Service and Privacy Policy pages. The workflow `.github/workflows/pages.yml` publishes them with GitHub Pages when you push to `main`.
+
+**This repo is PRIVATE. Free GitHub Pages will not serve a private repo.** To get working legal links, do one of these:
+
+1. Make the repo public.
+2. Deploy the `site/` folder to a free static host (for example Cloudflare Pages or Netlify). Then update `LEGAL_URLS` in `src/legal/urls.ts` to the new URLs.
+
+Then paste the Terms of Service URL and the Privacy Policy URL into the Terms of Service and Privacy Policy URL fields in the Discord Developer Portal. The `/legal` command returns the same URLs.
 
 ## 4. First-run setup
 
